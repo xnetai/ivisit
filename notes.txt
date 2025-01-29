@@ -1,11 +1,24 @@
 flutter create ivisit
 flutter run (run emulator|simulator before)
 
+
+gh auth login 
+
 git init
 git add .
 git remote add origin https://github.com/xnetai/ivisit  <remote-url>
+git config --global user.name "xnetai"
+git config --global user.email "xnet8080@gmail.com"
+# for macOs
+git config --global credential.helper osxkeychain
+# for Windows
+git config --global credential.helper wincred
+# for Linux
+git config --global credential.helper cache
+git config --list
+
 git commit -m "Initial commit"
-git push -u origin master
+git push -u origin main # master
 
 
 
