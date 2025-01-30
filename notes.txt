@@ -3,6 +3,11 @@ flutter run (run emulator|simulator before)
 
 
 gh auth login 
+git config pull.rebase true
+git pull origin main
+git add .
+git rebase --continue
+git push origin main
 
 git init
 git add .

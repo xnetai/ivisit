@@ -1,4 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'models/contact.dart';
+import 'models/appointment.dart';
+import 'widgets/contacts_page.dart';
+import 'utils.dart';
 
 void main() {
   runApp(const MyApp());
@@ -7,119 +13,490 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      title: 'iVisit',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const HomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  HomePageState createState() => HomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class HomePageState extends State<HomePage> {
+  List<Contact> contacts = [];
+  List<Appointment> appointments = [];
+  String _viewType = 'Daily';
 
-  void _incrementCounter() {
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final contactsData = prefs.getString('contacts');
+    final appointmentsData = prefs.getString('appointments');
+
+    if (contactsData != null) {
+      setState(() {
+        contacts = (json.decode(contactsData) as List)
+            .map((data) => Contact.fromJson(data))
+            .toList();
+      });
+    }
+
+    if (appointmentsData != null) {
+      setState(() {
+        appointments = (json.decode(appointmentsData) as List)
+            .map((data) => Appointment.fromJson(data))
+            .toList();
+      });
+    }
+  }
+
+  Future<void> _saveAppointments() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('appointments', jsonEncode(appointments.map((a) => a.toJson()).toList()));
+  }
+
+  void _onAppointmentAdded(Appointment appointment) {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      appointments.add(appointment);
+      _saveAppointments();
+    });
+  }
+
+  void _onAppointmentUpdated(Appointment oldAppointment, Appointment newAppointment) {
+    setState(() {
+      appointments.remove(oldAppointment);
+      appointments.add(newAppointment);
+      _saveAppointments();
+    });
+  }
+
+  void _onAppointmentDeleted(Appointment appointment) {
+    setState(() {
+      appointments.remove(appointment);
+      _saveAppointments();
+    });
+  }
+
+  void _showAddAppointmentDialog() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ContactsPage(
+          contacts: contacts,
+          onContactSelected: (contact) {
+            final DateTime selectedDate = DateTime.now();
+            final DateTime startTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, 9, 0);
+            final DateTime endTime = startTime.add(const Duration(hours: 1));
+            final Appointment newAppointment = Appointment(
+              startTime: startTime,
+              endTime: endTime,
+              contact: contact,
+            );
+            _onAppointmentAdded(newAppointment);
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _showEditAppointmentDialog(Appointment appointment) {
+    final TextEditingController startTimeController = TextEditingController(text: appointment.startTime.toString());
+    final TextEditingController endTimeController = TextEditingController(text: appointment.endTime.toString());
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Appointment'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Contact: ${appointment.contact.firstName} ${appointment.contact.lastName}'),
+              TextField(
+                controller: startTimeController,
+                decoration: const InputDecoration(labelText: 'Start Time'),
+                readOnly: true,
+                onTap: () async {
+                  final TimeOfDay? pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(appointment.startTime),
+                  );
+                  if (pickedTime != null) {
+                    final DateTime newStartTime = DateTime(
+                      appointment.startTime.year,
+                      appointment.startTime.month,
+                      appointment.startTime.day,
+                      pickedTime.hour,
+                      pickedTime.minute,
+                    );
+                    setState(() {
+                      final updatedAppointment = Appointment(
+                        startTime: newStartTime,
+                        endTime: appointment.endTime,
+                        contact: appointment.contact,
+                      );
+                      _onAppointmentUpdated(appointment, updatedAppointment);
+                      startTimeController.text = newStartTime.toString();
+                    });
+                  }
+                },
+              ),
+              TextField(
+                controller: endTimeController,
+                decoration: const InputDecoration(labelText: 'End Time'),
+                readOnly: true,
+                onTap: () async {
+                  final TimeOfDay? pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(appointment.endTime),
+                  );
+                  if (pickedTime != null) {
+                    final DateTime newEndTime = DateTime(
+                      appointment.endTime.year,
+                      appointment.endTime.month,
+                      appointment.endTime.day,
+                      pickedTime.hour,
+                      pickedTime.minute,
+                    );
+                    setState(() {
+                      final updatedAppointment = Appointment(
+                        startTime: appointment.startTime,
+                        endTime: newEndTime,
+                        contact: appointment.contact,
+                      );
+                      _onAppointmentUpdated(appointment, updatedAppointment);
+                      endTimeController.text = newEndTime.toString();
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Save'),
+              onPressed: () {
+                final Appointment updatedAppointment = Appointment(
+                  startTime: DateTime.parse(startTimeController.text),
+                  endTime: DateTime.parse(endTimeController.text),
+                  contact: appointment.contact,
+                );
+                _onAppointmentUpdated(appointment, updatedAppointment);
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Delete'),
+              onPressed: () {
+                _onAppointmentDeleted(appointment);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _changeView(String viewType) {
+    setState(() {
+      _viewType = viewType;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('iVisit'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: _changeView,
+            itemBuilder: (BuildContext context) {
+              return {'Daily', 'Weekly', 'Monthly'}.map((String choice) {
+                return PopupMenuItem<String>(
+                  value: choice,
+                  child: Text(choice),
+                );
+              }).toList();
+            },
+          ),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
+      body: _viewType == 'Daily'
+          ? ListView.builder(
+              itemCount: appointments.length,
+              itemBuilder: (context, index) {
+                final appointment = appointments[index];
+                return ListTile(
+                  title: Text('${appointment.contact.firstName} ${appointment.contact.lastName}'),
+                  subtitle: Text('${appointment.startTime} - ${appointment.endTime}'),
+                  onTap: () => _showEditAppointmentDialog(appointment),
+                );
+              },
+            )
+          : _viewType == 'Weekly'
+              ? ListView.builder(
+                  itemCount: 7,
+                  itemBuilder: (context, index) {
+                    final DateTime weekDay = DateTime.now().add(Duration(days: index));
+                    final int appointmentCount = appointments.where((appointment) {
+                      return appointment.startTime.day == weekDay.day &&
+                          appointment.startTime.month == weekDay.month &&
+                          appointment.startTime.year == weekDay.year;
+                    }).length;
+                    return ListTile(
+                      title: Text('${weekDay.year}-${weekDay.month}-${weekDay.day}'),
+                      subtitle: Text('Appointments: $appointmentCount'),
+                      onTap: () {
+                        setState(() {
+                          _viewType = 'Daily';
+                        });
+                      },
+                    );
+                  },
+                )
+              : ListView.builder(
+                  itemCount: 30,
+                  itemBuilder: (context, index) {
+                    final DateTime monthDay = DateTime.now().add(Duration(days: index));
+                    final int appointmentCount = appointments.where((appointment) {
+                      return appointment.startTime.day == monthDay.day &&
+                          appointment.startTime.month == monthDay.month &&
+                          appointment.startTime.year == monthDay.year;
+                    }).length;
+                    return ListTile(
+                      title: Text('${monthDay.year}-${monthDay.month}-${monthDay.day}'),
+                      subtitle: Text('Appointments: $appointmentCount'),
+                      onTap: () {
+                        setState(() {
+                          _viewType = 'Daily';
+                        });
+                      },
+                    );
+                  },
+                ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
+        onPressed: _showAddAppointmentDialog,
         child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ),
     );
   }
 }
+
+
+
+
+
+
+
+
+// import 'dart:convert';
+// import 'package:flutter/material.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:syncfusion_flutter_calendar/calendar.dart' as calendar;
+// import 'models/contact.dart';
+// import 'models/appointment.dart';
+// import 'widgets/calendar_page.dart';
+// import 'widgets/contacts_page.dart';
+
+// void main() {
+//   runApp(const MyApp());
+// }
+
+// class MyApp extends StatelessWidget {
+//   const MyApp({super.key});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp(
+//       title: 'iVisit',
+//       theme: ThemeData(primarySwatch: Colors.blue),
+//       home: const HomePage(),
+//     );
+//   }
+// }
+
+// class HomePage extends StatefulWidget {
+//   const HomePage({super.key});
+
+//   @override
+//   HomePageState createState() => HomePageState();
+// }
+
+// class HomePageState extends State<HomePage> {
+//   int _selectedIndex = 0;
+//   List<Contact> contacts = [];
+//   List<Appointment> appointments = [];
+//   late AppointmentDataSource dataSource;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     _loadData();
+//   }
+
+//   Future<void> _loadData() async {
+//     final prefs = await SharedPreferences.getInstance();
+//     final contactsData = prefs.getString('contacts');
+//     final appointmentsData = prefs.getString('appointments');
+
+//     if (contactsData != null) {
+//       setState(() {
+//         contacts = (json.decode(contactsData) as List)
+//             .map((data) => Contact.fromJson(data))
+//             .toList();
+//       });
+//     }
+
+//     if (appointmentsData != null) {
+//       setState(() {
+//         appointments = (json.decode(appointmentsData) as List)
+//             .map((data) => Appointment.fromJson(data))
+//             .toList();
+//         dataSource = AppointmentDataSource(appointments);
+//       });
+//     } else {
+//       dataSource = AppointmentDataSource([]);
+//     }
+//   }
+
+//   Future<void> _saveContacts() async {
+//     final prefs = await SharedPreferences.getInstance();
+//     await prefs.setString('contacts', jsonEncode(contacts.map((c) => c.toJson()).toList()));
+//   }
+
+//   Future<void> _saveAppointments() async {
+//     final prefs = await SharedPreferences.getInstance();
+//     await prefs.setString('appointments', 
+//       jsonEncode(appointments.map((a) => a.toJson()).toList()));
+//   }
+
+//   void _onAppointmentAdded(Appointment appointment) {
+//     setState(() {
+//       appointments.add(appointment);
+//       _saveAppointments();
+//       dataSource = AppointmentDataSource(appointments);
+//     });
+//   }
+
+//   // void _onContactAdded(Contact contact) {
+//   //   setState(() {
+//   //     contacts.add(contact);
+//   //     _saveContacts();
+//   //   });
+//   // }
+
+//   void _onItemTapped(int index) {
+//     setState(() {
+//       _selectedIndex = index;
+//     });
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(title: const Text('iVisit')),
+//       body: _selectedIndex == 0
+//           ? CalendarPage()
+//           : _selectedIndex == 1
+//               ? ContactsPage(
+//                   contacts: contacts,
+//                   onContactSelected: (contact) {
+//                     // Handle contact selection if needed
+//                   },
+//                 )
+//               : const SettingsPage(),
+//       bottomNavigationBar: BottomNavigationBar(
+//         items: const [
+//           BottomNavigationBarItem(
+//             icon: Icon(Icons.calendar_today),
+//             label: 'Calendar',
+//           ),
+//           BottomNavigationBarItem(
+//             icon: Icon(Icons.contacts),
+//             label: 'Contacts',
+//           ),
+//           BottomNavigationBarItem(
+//             icon: Icon(Icons.settings),
+//             label: 'Settings',
+//           ),
+//         ],
+//         currentIndex: _selectedIndex,
+//         onTap: _onItemTapped,
+//       ),
+//       floatingActionButton: _selectedIndex != 2
+//           ? FloatingActionButton(
+//               onPressed: () => _selectedIndex == 0
+//                   ? _showAddAppointmentDialog()
+//                   : _showAddContactDialog(),
+//               child: const Icon(Icons.add),
+//             )
+//           : null,
+//     );
+//   }
+
+//   void _showAddAppointmentDialog() {
+//     Navigator.push(
+//       context,
+//       MaterialPageRoute(
+//         builder: (context) => ContactsPage(
+//           contacts: contacts,
+//           onContactSelected: (contact) {
+//             final DateTime selectedDate = DateTime.now();
+//             final DateTime startTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, 9, 0);
+//             final DateTime endTime = startTime.add(const Duration(hours: 1));
+//             final Appointment newAppointment = Appointment(
+//               startTime: startTime,
+//               endTime: endTime,
+//               contact: contact,
+//             );
+//             _onAppointmentAdded(newAppointment);
+//             Navigator.pop(context);
+//           },
+//         ),
+//       ),
+//     );
+//   }
+
+//   void _showAddContactDialog() {
+//     // Implement add contact dialog
+//   }
+// }
+
+// class AppointmentDataSource extends calendar.CalendarDataSource {
+//   AppointmentDataSource(List<Appointment> source) {
+//     appointments = source;
+//   }
+// }
+
+// class SettingsPage extends StatelessWidget {
+//   const SettingsPage({super.key});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return const Center(
+//       child: Text('Settings Page'),
+//     );
+//   }
+// }
