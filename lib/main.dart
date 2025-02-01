@@ -5,6 +5,7 @@ import 'models/contact.dart';
 import 'models/appointment.dart';
 import 'widgets/contacts_page.dart';
 import 'utils.dart';
+import 'package:intl/intl.dart';
 
 void main() {
   runApp(const MyApp());
@@ -39,12 +40,14 @@ class HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadData();
+    _deleteAllAppointments(); // 4testing/debugging
   }
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final contactsData = prefs.getString('contacts');
     final appointmentsData = prefs.getString('appointments');
+    
 
     if (contactsData != null) {
       setState(() {
@@ -63,24 +66,47 @@ class HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _saveAppointments() async {
+    void _deleteAllAppointments() { // 4testing/debugging
+    setState(() {
+      appointments.clear();
+      _saveAppointments();
+    });
+     print('All appointments deleted');
+  }
+
+
+Future<void> _saveAppointments() async {
+  try {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('appointments', jsonEncode(appointments.map((a) => a.toJson()).toList()));
+    print('Appointments saved successfully');
+    //setState(() {});
+  } catch (e) {
+    print('Failed to save appointments: $e');
   }
+}
+  // Future<void> _saveAppointments() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   await prefs.setString('appointments', jsonEncode(appointments.map((a) => a.toJson()).toList()));
+  // }
+
 
   void _onAppointmentAdded(Appointment appointment) {
     setState(() {
       appointments.add(appointment);
-      _saveAppointments();
-    });
+      //_saveAppointments();
+    });   
+    _saveAppointments();
   }
 
   void _onAppointmentUpdated(Appointment oldAppointment, Appointment newAppointment) {
     setState(() {
-      appointments.remove(oldAppointment);
-      appointments.add(newAppointment);
-      _saveAppointments();
+      final index = appointments.indexOf(oldAppointment);
+      if (index != -1) {
+        appointments[index] = newAppointment;
+      }
     });
+    _saveAppointments();
   }
 
   void _onAppointmentDeleted(Appointment appointment) {
@@ -106,7 +132,10 @@ class HomePageState extends State<HomePage> {
               contact: contact,
             );
             _onAppointmentAdded(newAppointment);
+             print('Appointment added: $newAppointment');
+            //setState(() {}); //redundant?
             Navigator.pop(context);
+            
           },
         ),
       ),
@@ -114,109 +143,128 @@ class HomePageState extends State<HomePage> {
   }
 
   void _showEditAppointmentDialog(Appointment appointment) {
-    final TextEditingController startTimeController = TextEditingController(text: appointment.startTime.toString());
-    final TextEditingController endTimeController = TextEditingController(text: appointment.endTime.toString());
+  final TextEditingController dateController = TextEditingController(text: DateFormat('dd/MM/yyyy').format(appointment.startTime));
+  final TextEditingController startTimeController = TextEditingController(text: DateFormat('HH:mm').format(appointment.startTime));
+  final TextEditingController endTimeController = TextEditingController(text: DateFormat('HH:mm').format(appointment.endTime));
 
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Edit Appointment'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Contact: ${appointment.contact.firstName} ${appointment.contact.lastName}'),
-              TextField(
-                controller: startTimeController,
-                decoration: const InputDecoration(labelText: 'Start Time'),
-                readOnly: true,
-                onTap: () async {
-                  final TimeOfDay? pickedTime = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.fromDateTime(appointment.startTime),
-                  );
-                  if (pickedTime != null) {
-                    final DateTime newStartTime = DateTime(
-                      appointment.startTime.year,
-                      appointment.startTime.month,
-                      appointment.startTime.day,
-                      pickedTime.hour,
-                      pickedTime.minute,
-                    );
-                    setState(() {
-                      final updatedAppointment = Appointment(
-                        startTime: newStartTime,
-                        endTime: appointment.endTime,
-                        contact: appointment.contact,
-                      );
-                      _onAppointmentUpdated(appointment, updatedAppointment);
-                      startTimeController.text = newStartTime.toString();
-                    });
-                  }
-                },
-              ),
-              TextField(
-                controller: endTimeController,
-                decoration: const InputDecoration(labelText: 'End Time'),
-                readOnly: true,
-                onTap: () async {
-                  final TimeOfDay? pickedTime = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.fromDateTime(appointment.endTime),
-                  );
-                  if (pickedTime != null) {
-                    final DateTime newEndTime = DateTime(
-                      appointment.endTime.year,
-                      appointment.endTime.month,
-                      appointment.endTime.day,
-                      pickedTime.hour,
-                      pickedTime.minute,
-                    );
-                    setState(() {
-                      final updatedAppointment = Appointment(
-                        startTime: appointment.startTime,
-                        endTime: newEndTime,
-                        contact: appointment.contact,
-                      );
-                      _onAppointmentUpdated(appointment, updatedAppointment);
-                      endTimeController.text = newEndTime.toString();
-                    });
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: const Text('Save'),
-              onPressed: () {
-                final Appointment updatedAppointment = Appointment(
-                  startTime: DateTime.parse(startTimeController.text),
-                  endTime: DateTime.parse(endTimeController.text),
-                  contact: appointment.contact,
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Edit Appointment'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Contact: ${appointment.contact.firstName} ${appointment.contact.lastName}'),
+            TextField(
+              controller: dateController,
+              decoration: const InputDecoration(labelText: 'Date (DD/MM/YYYY)'),
+              readOnly: true,
+              onTap: () async {
+                final DateTime? pickedDate = await showDatePicker(
+                  context: context,
+                  initialDate: appointment.startTime,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2101),
                 );
-                _onAppointmentUpdated(appointment, updatedAppointment);
-                Navigator.of(context).pop();
+                if (pickedDate != null) {
+                  setState(() {
+                    dateController.text = DateFormat('dd/MM/yyyy').format(pickedDate);
+                  });
+                }
               },
             ),
-            TextButton(
-              child: const Text('Delete'),
-              onPressed: () {
-                _onAppointmentDeleted(appointment);
-                Navigator.of(context).pop();
+            TextField(
+              controller: startTimeController,
+              decoration: const InputDecoration(labelText: 'Start Time (HH:MM)'),
+              readOnly: true,
+              onTap: () async {
+                final TimeOfDay? pickedTime = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(appointment.startTime),
+                );
+                if (pickedTime != null) {
+                  setState(() {
+                    startTimeController.text = pickedTime.format(context);
+                  });
+                }
+              },
+            ),
+            TextField(
+              controller: endTimeController,
+              decoration: const InputDecoration(labelText: 'End Time (HH:MM)'),
+              readOnly: true,
+              onTap: () async {
+                final TimeOfDay? pickedTime = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(appointment.endTime),
+                );
+                if (pickedTime != null) {
+                  setState(() {
+                    endTimeController.text = pickedTime.format(context);
+                  });
+                }
               },
             ),
           ],
-        );
-      },
-    );
-  }
+        ),
+        actions: <Widget>[
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+          TextButton(
+            child: const Text('Save'),
+            onPressed: () {
+              final DateTime newDate = DateFormat('dd/MM/yyyy').parse(dateController.text);
+              final TimeOfDay newStartTime = TimeOfDay(
+                hour: int.parse(startTimeController.text.split(':')[0]),
+                minute: int.parse(startTimeController.text.split(':')[1]),
+              );
+              final TimeOfDay newEndTime = TimeOfDay(
+                hour: int.parse(endTimeController.text.split(':')[0]),
+                minute: int.parse(endTimeController.text.split(':')[1]),
+              );
+
+              final DateTime newStartDateTime = DateTime(
+                newDate.year,
+                newDate.month,
+                newDate.day,
+                newStartTime.hour,
+                newStartTime.minute,
+              );
+              final DateTime newEndDateTime = DateTime(
+                newDate.year,
+                newDate.month,
+                newDate.day,
+                newEndTime.hour,
+                newEndTime.minute,
+              );
+
+              final Appointment updatedAppointment = Appointment(
+                startTime: newStartDateTime,
+                endTime: newEndDateTime,
+                contact: appointment.contact,
+              );
+
+              _onAppointmentUpdated(appointment, updatedAppointment);
+              Navigator.of(context).pop();
+            },
+          ),
+          TextButton(
+            child: const Text('Delete'),
+            onPressed: () {
+              _onAppointmentDeleted(appointment);
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
 
   void _changeView(String viewType) {
     setState(() {
@@ -303,200 +351,3 @@ class HomePageState extends State<HomePage> {
     );
   }
 }
-
-
-
-
-
-
-
-
-// import 'dart:convert';
-// import 'package:flutter/material.dart';
-// import 'package:shared_preferences/shared_preferences.dart';
-// import 'package:syncfusion_flutter_calendar/calendar.dart' as calendar;
-// import 'models/contact.dart';
-// import 'models/appointment.dart';
-// import 'widgets/calendar_page.dart';
-// import 'widgets/contacts_page.dart';
-
-// void main() {
-//   runApp(const MyApp());
-// }
-
-// class MyApp extends StatelessWidget {
-//   const MyApp({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(
-//       title: 'iVisit',
-//       theme: ThemeData(primarySwatch: Colors.blue),
-//       home: const HomePage(),
-//     );
-//   }
-// }
-
-// class HomePage extends StatefulWidget {
-//   const HomePage({super.key});
-
-//   @override
-//   HomePageState createState() => HomePageState();
-// }
-
-// class HomePageState extends State<HomePage> {
-//   int _selectedIndex = 0;
-//   List<Contact> contacts = [];
-//   List<Appointment> appointments = [];
-//   late AppointmentDataSource dataSource;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _loadData();
-//   }
-
-//   Future<void> _loadData() async {
-//     final prefs = await SharedPreferences.getInstance();
-//     final contactsData = prefs.getString('contacts');
-//     final appointmentsData = prefs.getString('appointments');
-
-//     if (contactsData != null) {
-//       setState(() {
-//         contacts = (json.decode(contactsData) as List)
-//             .map((data) => Contact.fromJson(data))
-//             .toList();
-//       });
-//     }
-
-//     if (appointmentsData != null) {
-//       setState(() {
-//         appointments = (json.decode(appointmentsData) as List)
-//             .map((data) => Appointment.fromJson(data))
-//             .toList();
-//         dataSource = AppointmentDataSource(appointments);
-//       });
-//     } else {
-//       dataSource = AppointmentDataSource([]);
-//     }
-//   }
-
-//   Future<void> _saveContacts() async {
-//     final prefs = await SharedPreferences.getInstance();
-//     await prefs.setString('contacts', jsonEncode(contacts.map((c) => c.toJson()).toList()));
-//   }
-
-//   Future<void> _saveAppointments() async {
-//     final prefs = await SharedPreferences.getInstance();
-//     await prefs.setString('appointments', 
-//       jsonEncode(appointments.map((a) => a.toJson()).toList()));
-//   }
-
-//   void _onAppointmentAdded(Appointment appointment) {
-//     setState(() {
-//       appointments.add(appointment);
-//       _saveAppointments();
-//       dataSource = AppointmentDataSource(appointments);
-//     });
-//   }
-
-//   // void _onContactAdded(Contact contact) {
-//   //   setState(() {
-//   //     contacts.add(contact);
-//   //     _saveContacts();
-//   //   });
-//   // }
-
-//   void _onItemTapped(int index) {
-//     setState(() {
-//       _selectedIndex = index;
-//     });
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: const Text('iVisit')),
-//       body: _selectedIndex == 0
-//           ? CalendarPage()
-//           : _selectedIndex == 1
-//               ? ContactsPage(
-//                   contacts: contacts,
-//                   onContactSelected: (contact) {
-//                     // Handle contact selection if needed
-//                   },
-//                 )
-//               : const SettingsPage(),
-//       bottomNavigationBar: BottomNavigationBar(
-//         items: const [
-//           BottomNavigationBarItem(
-//             icon: Icon(Icons.calendar_today),
-//             label: 'Calendar',
-//           ),
-//           BottomNavigationBarItem(
-//             icon: Icon(Icons.contacts),
-//             label: 'Contacts',
-//           ),
-//           BottomNavigationBarItem(
-//             icon: Icon(Icons.settings),
-//             label: 'Settings',
-//           ),
-//         ],
-//         currentIndex: _selectedIndex,
-//         onTap: _onItemTapped,
-//       ),
-//       floatingActionButton: _selectedIndex != 2
-//           ? FloatingActionButton(
-//               onPressed: () => _selectedIndex == 0
-//                   ? _showAddAppointmentDialog()
-//                   : _showAddContactDialog(),
-//               child: const Icon(Icons.add),
-//             )
-//           : null,
-//     );
-//   }
-
-//   void _showAddAppointmentDialog() {
-//     Navigator.push(
-//       context,
-//       MaterialPageRoute(
-//         builder: (context) => ContactsPage(
-//           contacts: contacts,
-//           onContactSelected: (contact) {
-//             final DateTime selectedDate = DateTime.now();
-//             final DateTime startTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, 9, 0);
-//             final DateTime endTime = startTime.add(const Duration(hours: 1));
-//             final Appointment newAppointment = Appointment(
-//               startTime: startTime,
-//               endTime: endTime,
-//               contact: contact,
-//             );
-//             _onAppointmentAdded(newAppointment);
-//             Navigator.pop(context);
-//           },
-//         ),
-//       ),
-//     );
-//   }
-
-//   void _showAddContactDialog() {
-//     // Implement add contact dialog
-//   }
-// }
-
-// class AppointmentDataSource extends calendar.CalendarDataSource {
-//   AppointmentDataSource(List<Appointment> source) {
-//     appointments = source;
-//   }
-// }
-
-// class SettingsPage extends StatelessWidget {
-//   const SettingsPage({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return const Center(
-//       child: Text('Settings Page'),
-//     );
-//   }
-// }

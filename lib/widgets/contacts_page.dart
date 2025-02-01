@@ -19,10 +19,11 @@ class ContactsPage extends StatelessWidget {
           final contact = contacts[index];
           return ListTile(
             title: Text('${contact.firstName} ${contact.lastName}'),
-            onTap: () {
-              onContactSelected(contact);
-              Navigator.pop(context);
-            },
+            // onTap: () {
+            //   onContactSelected(contact);
+            //   Navigator.pop(context);
+            // },
+            onTap: () => onContactSelected(contact),
           );
         },
       ),

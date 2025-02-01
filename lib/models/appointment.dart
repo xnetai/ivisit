@@ -12,16 +12,26 @@ class Appointment {
     return Appointment(
       startTime: DateTime.parse(json['startTime']),
       endTime: DateTime.parse(json['endTime']),
-      contact: json['contact'] != null ? Contact.fromJson(json['contact']) : Contact(firstName: 'na', lastName: 'na') //throw ArgumentError('Contact cannot be null'),
+      contact: Contact.fromJson(json['contact']), //json['contact'],
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'startTime': startTime.toIso8601String(),
-      'endTime': endTime.toIso8601String(),
-      'contact': contact.toJson(),
-    };
+    try {
+      return {
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+        'contact': contact.toJson(),
+      };
+    } catch (e) {
+      print(e);
+      return {};
+    }
+    // return {
+    //   'startTime': startTime.toIso8601String(),
+    //   'endTime': endTime.toIso8601String(),
+    //   'contact': contact.toJson(),
+    // };
   }
 }
 
