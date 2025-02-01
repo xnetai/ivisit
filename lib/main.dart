@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 import 'models/contact.dart';
 import 'models/appointment.dart';
 import 'widgets/contacts_page.dart';
+import 'widgets/settings_page.dart';
+import 'widgets/calendar_page.dart';
 import 'utils.dart';
-import 'package:intl/intl.dart';
 
 void main() {
   runApp(const MyApp());
@@ -32,6 +34,7 @@ class HomePage extends StatefulWidget {
 }
 
 class HomePageState extends State<HomePage> {
+  int _selectedIndex = 0;
   List<Contact> contacts = [];
   List<Appointment> appointments = [];
   String _viewType = 'Daily';
@@ -40,14 +43,12 @@ class HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadData();
-    _deleteAllAppointments(); // 4testing/debugging
   }
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final contactsData = prefs.getString('contacts');
     final appointmentsData = prefs.getString('appointments');
-    
 
     if (contactsData != null) {
       setState(() {
@@ -66,36 +67,20 @@ class HomePageState extends State<HomePage> {
     }
   }
 
-    void _deleteAllAppointments() { // 4testing/debugging
-    setState(() {
-      appointments.clear();
-      _saveAppointments();
-    });
-     print('All appointments deleted');
+  Future<void> _saveAppointments() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('appointments', jsonEncode(appointments.map((a) => a.toJson()).toList()));
+      print('Appointments saved successfully');
+    } catch (e) {
+      print('Failed to save appointments: $e');
+    }
   }
-
-
-Future<void> _saveAppointments() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('appointments', jsonEncode(appointments.map((a) => a.toJson()).toList()));
-    print('Appointments saved successfully');
-    //setState(() {});
-  } catch (e) {
-    print('Failed to save appointments: $e');
-  }
-}
-  // Future<void> _saveAppointments() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   await prefs.setString('appointments', jsonEncode(appointments.map((a) => a.toJson()).toList()));
-  // }
-
 
   void _onAppointmentAdded(Appointment appointment) {
     setState(() {
       appointments.add(appointment);
-      //_saveAppointments();
-    });   
+    });
     _saveAppointments();
   }
 
@@ -116,155 +101,128 @@ Future<void> _saveAppointments() async {
     });
   }
 
-  void _showAddAppointmentDialog() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ContactsPage(
-          contacts: contacts,
-          onContactSelected: (contact) {
-            final DateTime selectedDate = DateTime.now();
-            final DateTime startTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, 9, 0);
-            final DateTime endTime = startTime.add(const Duration(hours: 1));
-            final Appointment newAppointment = Appointment(
-              startTime: startTime,
-              endTime: endTime,
-              contact: contact,
-            );
-            _onAppointmentAdded(newAppointment);
-             print('Appointment added: $newAppointment');
-            //setState(() {}); //redundant?
-            Navigator.pop(context);
-            
-          },
-        ),
-      ),
-    );
+  void _deleteAllAppointments() {
+    setState(() {
+      appointments.clear();
+      _saveAppointments();
+    });
   }
 
-  void _showEditAppointmentDialog(Appointment appointment) {
-  final TextEditingController dateController = TextEditingController(text: DateFormat('dd/MM/yyyy').format(appointment.startTime));
-  final TextEditingController startTimeController = TextEditingController(text: DateFormat('HH:mm').format(appointment.startTime));
-  final TextEditingController endTimeController = TextEditingController(text: DateFormat('HH:mm').format(appointment.endTime));
+  void _showAddAppointmentDialog() {
+    final TextEditingController dateController = TextEditingController(text: DateFormat('dd/MM/yyyy').format(DateTime.now()));
+    final TextEditingController startTimeController = TextEditingController(text: DateFormat('HH:mm').format(DateTime.now()));
+    final TextEditingController endTimeController = TextEditingController(text: DateFormat('HH:mm').format(DateTime.now().add(Duration(hours: 1))));
 
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text('Edit Appointment'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Contact: ${appointment.contact.firstName} ${appointment.contact.lastName}'),
-            TextField(
-              controller: dateController,
-              decoration: const InputDecoration(labelText: 'Date (DD/MM/YYYY)'),
-              readOnly: true,
-              onTap: () async {
-                final DateTime? pickedDate = await showDatePicker(
-                  context: context,
-                  initialDate: appointment.startTime,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2101),
-                );
-                if (pickedDate != null) {
-                  setState(() {
-                    dateController.text = DateFormat('dd/MM/yyyy').format(pickedDate);
-                  });
-                }
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Add Appointment'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: dateController,
+                decoration: const InputDecoration(labelText: 'Date (DD/MM/YYYY)'),
+                readOnly: true,
+                onTap: () async {
+                  final DateTime? pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2101),
+                  );
+                  if (pickedDate != null) {
+                    setState(() {
+                      dateController.text = DateFormat('dd/MM/yyyy').format(pickedDate);
+                    });
+                  }
+                },
+              ),
+              TextField(
+                controller: startTimeController,
+                decoration: const InputDecoration(labelText: 'Start Time (HH:MM)'),
+                readOnly: true,
+                onTap: () async {
+                  final TimeOfDay? pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.now(),
+                  );
+                  if (pickedTime != null) {
+                    setState(() {
+                      startTimeController.text = pickedTime.format(context);
+                    });
+                  }
+                },
+              ),
+              TextField(
+                controller: endTimeController,
+                decoration: const InputDecoration(labelText: 'End Time (HH:MM)'),
+                readOnly: true,
+                onTap: () async {
+                  final TimeOfDay? pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1),
+                  );
+                  if (pickedTime != null) {
+                    setState(() {
+                      endTimeController.text = pickedTime.format(context);
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
               },
             ),
-            TextField(
-              controller: startTimeController,
-              decoration: const InputDecoration(labelText: 'Start Time (HH:MM)'),
-              readOnly: true,
-              onTap: () async {
-                final TimeOfDay? pickedTime = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.fromDateTime(appointment.startTime),
+            TextButton(
+              child: const Text('Save'),
+              onPressed: () {
+                final DateTime newDate = DateFormat('dd/MM/yyyy').parse(dateController.text);
+                final TimeOfDay newStartTime = TimeOfDay(
+                  hour: int.parse(startTimeController.text.split(':')[0]),
+                  minute: int.parse(startTimeController.text.split(':')[1]),
                 );
-                if (pickedTime != null) {
-                  setState(() {
-                    startTimeController.text = pickedTime.format(context);
-                  });
-                }
-              },
-            ),
-            TextField(
-              controller: endTimeController,
-              decoration: const InputDecoration(labelText: 'End Time (HH:MM)'),
-              readOnly: true,
-              onTap: () async {
-                final TimeOfDay? pickedTime = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.fromDateTime(appointment.endTime),
+                final TimeOfDay newEndTime = TimeOfDay(
+                  hour: int.parse(endTimeController.text.split(':')[0]),
+                  minute: int.parse(endTimeController.text.split(':')[1]),
                 );
-                if (pickedTime != null) {
-                  setState(() {
-                    endTimeController.text = pickedTime.format(context);
-                  });
-                }
+
+                final DateTime newStartDateTime = DateTime(
+                  newDate.year,
+                  newDate.month,
+                  newDate.day,
+                  newStartTime.hour,
+                  newStartTime.minute,
+                );
+                final DateTime newEndDateTime = DateTime(
+                  newDate.year,
+                  newDate.month,
+                  newDate.day,
+                  newEndTime.hour,
+                  newEndTime.minute,
+                );
+
+                final Appointment newAppointment = Appointment(
+                  startTime: newStartDateTime,
+                  endTime: newEndDateTime,
+                  contact: contacts.first, // Replace with actual contact selection logic
+                );
+
+                _onAppointmentAdded(newAppointment);
+                Navigator.of(context).pop();
               },
             ),
           ],
-        ),
-        actions: <Widget>[
-          TextButton(
-            child: const Text('Cancel'),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-          TextButton(
-            child: const Text('Save'),
-            onPressed: () {
-              final DateTime newDate = DateFormat('dd/MM/yyyy').parse(dateController.text);
-              final TimeOfDay newStartTime = TimeOfDay(
-                hour: int.parse(startTimeController.text.split(':')[0]),
-                minute: int.parse(startTimeController.text.split(':')[1]),
-              );
-              final TimeOfDay newEndTime = TimeOfDay(
-                hour: int.parse(endTimeController.text.split(':')[0]),
-                minute: int.parse(endTimeController.text.split(':')[1]),
-              );
-
-              final DateTime newStartDateTime = DateTime(
-                newDate.year,
-                newDate.month,
-                newDate.day,
-                newStartTime.hour,
-                newStartTime.minute,
-              );
-              final DateTime newEndDateTime = DateTime(
-                newDate.year,
-                newDate.month,
-                newDate.day,
-                newEndTime.hour,
-                newEndTime.minute,
-              );
-
-              final Appointment updatedAppointment = Appointment(
-                startTime: newStartDateTime,
-                endTime: newEndDateTime,
-                contact: appointment.contact,
-              );
-
-              _onAppointmentUpdated(appointment, updatedAppointment);
-              Navigator.of(context).pop();
-            },
-          ),
-          TextButton(
-            child: const Text('Delete'),
-            onPressed: () {
-              _onAppointmentDeleted(appointment);
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
   void _changeView(String viewType) {
     setState(() {
@@ -272,8 +230,23 @@ Future<void> _saveAppointments() async {
     });
   }
 
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    List<Widget> _pages = <Widget>[
+      CalendarPage(),
+      ContactsPage(
+        contacts: contacts,
+        onContactSelected: (contact) {},
+      ),
+      SettingsPage(),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('iVisit'),
@@ -289,6 +262,10 @@ Future<void> _saveAppointments() async {
               }).toList();
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: _deleteAllAppointments,
+          ),
         ],
       ),
       body: _viewType == 'Daily'
@@ -296,10 +273,42 @@ Future<void> _saveAppointments() async {
               itemCount: appointments.length,
               itemBuilder: (context, index) {
                 final appointment = appointments[index];
-                return ListTile(
-                  title: Text('${appointment.contact.firstName} ${appointment.contact.lastName}'),
-                  subtitle: Text('${appointment.startTime} - ${appointment.endTime}'),
-                  onTap: () => _showEditAppointmentDialog(appointment),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (index == 0 || !isSameDay(appointments[index - 1].startTime, appointment.startTime))
+                      Container(
+                        color: Colors.blue,
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          DateFormat('EEE d MMM yyyy').format(appointment.startTime),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ListTile(
+                      title: Text(
+                        '${DateFormat('HH:mm').format(appointment.startTime)} - ${DateFormat('HH:mm').format(appointment.endTime)} ${appointment.contact.firstName} ${appointment.contact.lastName}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.phone),
+                            onPressed: () {
+                              // Add phone call logic here
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.message),
+                            onPressed: () {
+                              // Add message logic here
+                            },
+                          ),
+                        ],
+                      ),
+                      onTap: () => _showEditAppointmentDialog(appointment),
+                    ),
+                  ],
                 );
               },
             )
@@ -344,10 +353,151 @@ Future<void> _saveAppointments() async {
                     );
                   },
                 ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddAppointmentDialog,
-        child: const Icon(Icons.add),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today),
+            label: 'Calendar',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.contacts),
+            label: 'Contacts',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: Colors.blue,
+        onTap: _onItemTapped,
       ),
+      floatingActionButton: _selectedIndex == 0
+          ? FloatingActionButton(
+              onPressed: _showAddAppointmentDialog,
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
+  }
+
+  void _showEditAppointmentDialog(Appointment appointment) {
+    final TextEditingController dateController = TextEditingController(text: DateFormat('dd/MM/yyyy').format(appointment.startTime));
+    final TextEditingController startTimeController = TextEditingController(text: DateFormat('HH:mm').format(appointment.startTime));
+    final TextEditingController endTimeController = TextEditingController(text: DateFormat('HH:mm').format(appointment.endTime));
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Appointment'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: dateController,
+                decoration: const InputDecoration(labelText: 'Date (DD/MM/YYYY)'),
+                readOnly: true,
+                onTap: () async {
+                  final DateTime? pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: appointment.startTime,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2101),
+                  );
+                  if (pickedDate != null) {
+                    setState(() {
+                      dateController.text = DateFormat('dd/MM/yyyy').format(pickedDate);
+                    });
+                  }
+                },
+              ),
+              TextField(
+                controller: startTimeController,
+                decoration: const InputDecoration(labelText: 'Start Time (HH:MM)'),
+                readOnly: true,
+                onTap: () async {
+                  final TimeOfDay? pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(appointment.startTime),
+                  );
+                  if (pickedTime != null) {
+                    setState(() {
+                      startTimeController.text = pickedTime.format(context);
+                    });
+                  }
+                },
+              ),
+              TextField(
+                controller: endTimeController,
+                decoration: const InputDecoration(labelText: 'End Time (HH:MM)'),
+                readOnly: true,
+                onTap: () async {
+                  final TimeOfDay? pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(appointment.endTime),
+                  );
+                  if (pickedTime != null) {
+                    setState(() {
+                      endTimeController.text = pickedTime.format(context);
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Save'),
+              onPressed: () {
+                final DateTime newDate = DateFormat('dd/MM/yyyy').parse(dateController.text);
+                final TimeOfDay newStartTime = TimeOfDay(
+                  hour: int.parse(startTimeController.text.split(':')[0]),
+                  minute: int.parse(startTimeController.text.split(' ')[0].split(':')[1]),
+                );
+                final TimeOfDay newEndTime = TimeOfDay(
+                  hour: int.parse(endTimeController.text.split(':')[0]),
+                  minute: int.parse(endTimeController.text.split(' ')[0].split(':')[1]),
+                );
+
+                final DateTime newStartDateTime = DateTime(
+                  newDate.year,
+                  newDate.month,
+                  newDate.day,
+                  newStartTime.hour,
+                  newStartTime.minute,
+                );
+                final DateTime newEndDateTime = DateTime(
+                  newDate.year,
+                  newDate.month,
+                  newDate.day,
+                  newEndTime.hour,
+                  newEndTime.minute,
+                );
+
+                final Appointment newAppointment = Appointment(
+                  startTime: newStartDateTime,
+                  endTime: newEndDateTime,
+                  contact: appointment.contact,
+                );
+
+                _onAppointmentUpdated(appointment, newAppointment);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  bool isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year && date1.month == date2.month && date1.day == date2.day;
   }
 }
