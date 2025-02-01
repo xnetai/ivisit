@@ -186,11 +186,11 @@ class HomePageState extends State<HomePage> {
                 final DateTime newDate = DateFormat('dd/MM/yyyy').parse(dateController.text);
                 final TimeOfDay newStartTime = TimeOfDay(
                   hour: int.parse(startTimeController.text.split(':')[0]),
-                  minute: int.parse(startTimeController.text.split(':')[1]),
+                  minute: int.parse(startTimeController.text.split(' ')[0].split(':')[1]),
                 );
                 final TimeOfDay newEndTime = TimeOfDay(
                   hour: int.parse(endTimeController.text.split(':')[0]),
-                  minute: int.parse(endTimeController.text.split(':')[1]),
+                  minute: int.parse(endTimeController.text.split(' ')[0].split(':')[1]),
                 );
 
                 final DateTime newStartDateTime = DateTime(
