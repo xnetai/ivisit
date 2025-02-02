@@ -123,3 +123,37 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+
+###### fixes
+
+
+iVisit
+
+Focus on TodayDate when Start the app or when the calendar page is refreshed
++ FloatingButton is circle and centered
+
+
+Calendar daily default today
+Weekly and Monthly view contains all history up to the latest appointment
+
+Weekly view centered blue header with Month Name, year, week number week’s startDate-endDate, and number of appointments in the circle for that week, press on the row opens the Daily calendar focused on the year/month/week startDate 
+
+Monthly view centered blue header with Month Name, year, month number month’s startDate-endDate, and number of appointments in the circle for that month, press on the row opens the Daily calendar focused on the year/month startDate
+
+Add search in Contacts and Appointments by firstName,lastName, id, phone, email
+Add multi-language support with flag switchers and defaultdevice lang
+Add firebase|cloud storage and notification
+Add native call dialer, email and whatsapp
+Add google, fb and custom logins with saving of the default profile picture+when updated
+Add business loging for host|client + settings like enforced reminders and approvals for a host
+
+
+Fix remove am/pm when formatting the date
+    minute: int.parse((startTimeController.text.replaceAll(RegExp(r'am|pm', caseSensitive: false), '').trim()).split(':')[1]),
+Fix : android/settings.gradle  id "com.android.application" version "8.2.1" apply false
+
+
+
+ToThink: default time slots, nextTime slot, Plan time slot, template/task timeSlot settings
+Page|List of available slots when add/update appointment
+
